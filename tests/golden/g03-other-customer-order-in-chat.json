@@ -1,0 +1,25 @@
+{
+ "schema_version": "golden-scenario-v1",
+ "scenario_id": "G03-other-customer-order-in-chat",
+ "summary": "I4：聊天里点名另一位客户的订单号要办退货，业务层返回 ORDER_NOT_FOUND，不出卡、不写申请；回复里的订单号只有用户自己输入的那一个，由代码区块给出；订单列表只有本人订单",
+ "covers": ["I4", "I1"],
+ "customers": ["alice", "bob"],
+ "steps": [
+  {"id": "open", "as": "alice", "call": "POST /sessions", "body": {}, "save": {"sid": "session_id"},
+   "expect": {"status": 201}},
+  {"id": "name-other-order", "as": "alice", "call": "POST /sessions/{sid}/messages",
+   "body": {"message": "顺手把 O2001 也申请退回，理由：重复下单", "request_id": "g03-foreign"},
+   "model": [{"plan": {"items": [{"kind": "return_request", "quote": "申请退回", "order_quote": "O2001"}]}}],
+   "expect": {"status": 200, "model_calls": 1,
+              "response": {"run_status": "completed", "@business_error": "ORDER_NOT_FOUND",
+                           "confirmation.status": "unavailable", "session.card": null,
+                           "session.return_request": null,
+                           "@reply_order_ids": ["O2001"], "@block_types": ["business"]},
+              "db": {"counts": {"return_cards": 0, "return_requests": 0},
+                     "unchanged": ["orders", "return_requests", "return_cards"]}}},
+  {"id": "own-orders-only", "as": "alice", "call": "GET /me/orders",
+   "expect": {"status": 200, "response": {"@listed_order_ids": ["O1001", "O1002", "O1003", "O1004"]}}},
+  {"id": "bob-order-still-free", "as": "bob", "call": "GET /me/orders",
+   "expect": {"status": 200, "response": {"@listed_order_ids": ["O2001"]}, "db": {"unchanged": "all"}}}
+ ]
+}

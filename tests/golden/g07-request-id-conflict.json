@@ -1,0 +1,30 @@
+{
+ "schema_version": "golden-scenario-v1",
+ "scenario_id": "G07-request-id-conflict",
+ "summary": "按 request_id 去重：同一 ID 同一内容回放保存结果、不调用模型；同一 ID 不同内容返回 REQUEST_CONFLICT，不调用模型、不写库；确认请求同样适用",
+ "covers": ["I3"],
+ "customers": ["alice"],
+ "steps": [
+  {"id": "open", "as": "alice", "call": "POST /sessions", "body": {}, "save": {"sid": "session_id"},
+   "expect": {"status": 201}},
+  {"id": "first", "as": "alice", "call": "POST /sessions/{sid}/messages",
+   "body": {"message": "我名下的帆布包现在能退吗", "request_id": "g07-one"},
+   "model": [{"plan": {"items": []}},
+             {"answer": {"note": "我先把这单的情况列在下面。"}}],
+   "expect": {"status": 200, "model_calls": 2, "response": {"run_status": "completed"}}},
+  {"id": "same-id-same-text", "as": "alice", "call": "POST /sessions/{sid}/messages",
+   "body": {"message": "我名下的帆布包现在能退吗", "request_id": "g07-one"},
+   "expect": {"status": 200, "model_calls": 0, "response": {"replayed": true}, "db": {"unchanged": "all"}}},
+  {"id": "same-id-other-text", "as": "alice", "call": "POST /sessions/{sid}/messages",
+   "body": {"message": "换一句别的话", "request_id": "g07-one"},
+   "expect": {"status": 409, "model_calls": 0, "response": {"error.code": "REQUEST_CONFLICT"},
+              "db": {"unchanged": "all"}}},
+  {"id": "confirm-unknown-card", "as": "alice", "call": "POST /sessions/{sid}/cards/ACT-unknown/confirm",
+   "body": {"version": 1, "reason_code": "changed_mind", "reason_text": "", "request_id": "g07-click"},
+   "expect": {"status": 409, "response": {"error.code": "CONFIRMATION_INVALID"},
+              "db": {"unchanged_except": ["session_requests"], "counts": {"return_requests": 0}}}},
+  {"id": "confirm-same-id-other-card", "as": "alice", "call": "POST /sessions/{sid}/cards/ACT-other/confirm",
+   "body": {"version": 1, "reason_code": "changed_mind", "reason_text": "", "request_id": "g07-click"},
+   "expect": {"status": 409, "response": {"error.code": "REQUEST_CONFLICT"}, "db": {"unchanged": "all"}}}
+ ]
+}

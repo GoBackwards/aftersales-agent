@@ -1,0 +1,9 @@
+[project]
+name = "aftersales-agent"
+version = "0.5.0"
+description = "A local after-sales support agent with structured model outputs and explicit business decisions"
+requires-python = ">=3.11"
+dependencies = ["pydantic==2.13.5"]
+
+[tool.ruff]
+line-length = 100

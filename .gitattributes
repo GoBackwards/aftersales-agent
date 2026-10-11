@@ -1,0 +1,4 @@
+# Preserve the exact bytes used by frozen source/data hashes on every platform.
+* -text
+# Accept preserved Windows line endings while still checking ordinary whitespace errors.
+* whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

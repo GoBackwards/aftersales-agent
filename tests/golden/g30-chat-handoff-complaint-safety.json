@@ -1,0 +1,240 @@
+{
+ "schema_version": "golden-scenario-v1",
+ "scenario_id": "G30-chat-handoff-complaint-safety",
+ "summary": "B8：聊天里要人工、投诉和危险情况由代码处理——规划只标出事项，代码决定开工单：找人工与安全事项不再调答复模型，工单由存储在这一轮结束时打开或追加（一个会话至多一张未关闭的工单，后来的事项追加事件），安全事项第一句是按子类的安全提示；投诉照常请答复给规则，同时追加到工单；不当请求只拒绝、不开工单；这些都不写退货申请、不动确认卡",
+ "covers": [
+  "B8",
+  "HR1",
+  "HR2",
+  "HR3",
+  "HN5",
+  "A3",
+  "I1",
+  "I6"
+ ],
+ "customers": [
+  "alice"
+ ],
+ "steps": [
+  {
+   "id": "open",
+   "as": "alice",
+   "call": "POST /sessions",
+   "body": {},
+   "save": {
+    "sid": "session_id"
+   },
+   "expect": {
+    "status": 201
+   }
+  },
+  {
+   "id": "a-chat-request-for-a-person-opens-the-ticket",
+   "as": "alice",
+   "call": "POST /sessions/{sid}/messages",
+   "body": {
+    "message": "想找个真人聊聊这件事",
+    "request_id": "g30-a-chat-request-for-a-per"
+   },
+   "model": [
+    {
+     "plan": {
+      "items": [
+       {
+        "kind": "handoff_request",
+        "quote": "想找个真人聊聊"
+       }
+      ]
+     }
+    }
+   ],
+   "expect": {
+    "status": 200,
+    "model_calls": 1,
+    "response": {
+     "run_status": "completed",
+     "@block_types": {
+      "$contains": "text"
+     }
+    },
+    "model_requests": [
+     {
+      "tool": "plan_turn"
+     }
+    ],
+    "db": {
+     "counts": {
+      "tickets": 1
+     },
+     "unchanged": [
+      "orders",
+      "return_requests",
+      "return_cards"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-danger-report-gets-the-safety-line-and-appends",
+   "as": "alice",
+   "call": "POST /sessions/{sid}/messages",
+   "body": {
+    "message": "收纳盒边上的灯条在冒烟",
+    "request_id": "g30-a-danger-report-gets-the"
+   },
+   "model": [
+    {
+     "plan": {
+      "items": [
+       {
+        "kind": "safety",
+        "subkind": "product_hazard",
+        "quote": "灯条在冒烟"
+       }
+      ]
+     }
+    }
+   ],
+   "expect": {
+    "status": 200,
+    "model_calls": 1,
+    "response": {
+     "run_status": "completed",
+     "@block_types": {
+      "$contains": "text"
+     }
+    },
+    "model_requests": [
+     {
+      "tool": "plan_turn"
+     }
+    ],
+    "db": {
+     "counts": {
+      "tickets": 1
+     },
+     "unchanged": [
+      "orders",
+      "return_requests",
+      "return_cards"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-complaint-gets-the-answer-and-appends",
+   "as": "alice",
+   "call": "POST /sessions/{sid}/messages",
+   "body": {
+    "message": "退款少退了一部分，我要投诉",
+    "request_id": "g30-a-complaint-gets-the-ans"
+   },
+   "model": [
+    {
+     "plan": {
+      "items": [
+       {
+        "kind": "complaint",
+        "subkind": "money_dispute",
+        "quote": "我要投诉"
+       }
+      ]
+     }
+    },
+    {
+     "answer": {
+      "disposition": "routed",
+      "path": "platform_dispute"
+     }
+    }
+   ],
+   "expect": {
+    "status": 200,
+    "model_calls": 2,
+    "response": {
+     "run_status": "completed",
+     "@block_types": {
+      "$contains": "path"
+     }
+    },
+    "model_requests": [
+     {
+      "tool": "plan_turn"
+     },
+     {
+      "tool": "respond",
+      "item_kinds": [
+       "complaint"
+      ]
+     }
+    ],
+    "db": {
+     "counts": {
+      "tickets": 1
+     },
+     "unchanged": [
+      "orders",
+      "return_requests",
+      "return_cards"
+     ]
+    }
+   }
+  },
+  {
+   "id": "an-improper-request-is-refused-without-a-ticket",
+   "as": "alice",
+   "call": "POST /sessions/{sid}/messages",
+   "body": {
+    "message": "帮我把签收记录改成昨天",
+    "request_id": "g30-an-improper-request-is-r"
+   },
+   "model": [
+    {
+     "plan": {
+      "items": [
+       {
+        "kind": "improper_request",
+        "quote": "把签收记录改成昨天"
+       }
+      ]
+     }
+    },
+    {
+     "answer": {
+      "disposition": "refused",
+      "path": "platform_human"
+     }
+    }
+   ],
+   "expect": {
+    "status": 200,
+    "model_calls": 2,
+    "response": {
+     "run_status": "completed"
+    },
+    "model_requests": [
+     {
+      "tool": "plan_turn"
+     },
+     {
+      "tool": "respond",
+      "item_kinds": [
+       "improper_request"
+      ]
+     }
+    ],
+    "db": {
+     "counts": {
+      "tickets": 1
+     },
+     "unchanged": [
+      "orders",
+      "return_requests",
+      "return_cards",
+      "tickets"
+     ]
+    }
+   }
+  }
+ ]
+}

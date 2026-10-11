@@ -1,0 +1,581 @@
+{
+ "schema_version": "golden-scenario-v1",
+ "scenario_id": "G28-plan-items-and-item-degradation",
+ "summary": "B7 规划 v2：规划是一次严格的 plan_turn，只给目标、事项列表和两个回合级字段，上下文只有对话原文、本账号的订单编号和商品名称、本会话确认卡的订单编号；暂缓的说法不作废确认卡（K21）；改退另一单是同一轮的撤回加退货两项，没点名新订单时不会把刚作废的那单再出卡，而是请用户从其他订单里点选；一项办理没通过核对时只丢掉这一项、说一句代码短句，同一条消息里的问题照常回答，没有为它再调一次规划；退货事项引用历史消息也会被丢掉；结构不合格时同名纠错一次，再不合格这一轮按模型失败结束、什么都不写；查他人订单由代码说明找不到（找人工、投诉和安全事项的处理见 G30，B8）",
+ "covers": [
+  "B7-plan-turn",
+  "K20",
+  "K21",
+  "K5",
+  "K17",
+  "I1",
+  "I4",
+  "I6"
+ ],
+ "customers": [
+  "alice"
+ ],
+ "steps": [
+  {
+   "id": "open",
+   "as": "alice",
+   "call": "POST /sessions",
+   "body": {},
+   "save": {
+    "sid": "session_id"
+   },
+   "expect": {
+    "status": 201
+   }
+  },
+  {
+   "id": "the-planning-call-sees-items-orders-and-cards-only",
+   "as": "alice",
+   "call": "POST /sessions/{sid}/messages",
+   "body": {
+    "message": "你好，想先熟悉一下",
+    "request_id": "g28-hello"
+   },
+   "model": [
+    {
+     "plan": {
+      "items": [
+       {
+        "kind": "chit_chat",
+        "quote": "你好"
+       }
+      ]
+     }
+    },
+    {
+     "answer": {
+      "disposition": "answered",
+      "next_step": "需要看订单或问售后规则的话，直接说就可以。"
+     }
+    }
+   ],
+   "expect": {
+    "status": 200,
+    "model_calls": 2,
+    "response": {
+     "run_status": "completed",
+     "@text_blocks": [
+      [
+       "model",
+       "next_step",
+       null
+      ]
+     ]
+    },
+    "model_requests": [
+     {
+      "tool": "plan_turn",
+      "strict": true,
+      "offered": [
+       "fee_flow",
+       "goal",
+       "items",
+       "order_stage"
+      ],
+      "context_keys": [
+       "account_orders",
+       "current_message",
+       "history",
+       "session_cards",
+       "trust_note"
+      ],
+      "context_order_ids": [
+       "O1001",
+       "O1002",
+       "O1003",
+       "O1004"
+      ],
+      "plan_kinds": [
+       "policy_question",
+       "own_order_status",
+       "return_request",
+       "withdraw",
+       "handoff_request",
+       "complaint",
+       "safety",
+       "improper_request",
+       "chit_chat"
+      ]
+     },
+     {
+      "tool": "respond",
+      "item_kinds": [
+       "chit_chat"
+      ]
+     }
+    ],
+    "db": {
+     "unchanged": [
+      "orders",
+      "return_requests",
+      "return_cards",
+      "tickets",
+      "ticket_events"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-card",
+   "as": "alice",
+   "call": "POST /sessions/{sid}/messages",
+   "body": {
+    "message": "O1001 申请退货",
+    "request_id": "g28-card"
+   },
+   "model": [
+    {
+     "plan": {
+      "items": [
+       {
+        "kind": "return_request",
+        "quote": "申请退货",
+        "order_quote": "O1001",
+        "order_id": "O1001"
+       }
+      ]
+     }
+    }
+   ],
+   "save": {
+    "cup": "confirmation.action_id"
+   },
+   "expect": {
+    "status": 200,
+    "model_calls": 1,
+    "response": {
+     "@business_status": "awaiting_confirmation",
+     "@open_card_orders": [
+      "O1001"
+     ]
+    },
+    "db": {
+     "counts": {
+      "return_cards[status=pending]": 1,
+      "return_requests": 0
+     },
+     "unchanged": [
+      "orders",
+      "return_requests"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-pause-keeps-the-card",
+   "as": "alice",
+   "call": "POST /sessions/{sid}/messages",
+   "body": {
+    "message": "先别提交，我再想一想",
+    "request_id": "g28-pause"
+   },
+   "model": [
+    {
+     "plan": {
+      "items": [
+       {
+        "kind": "chit_chat",
+        "quote": "先别提交"
+       }
+      ]
+     }
+    },
+    {
+     "answer": {
+      "disposition": "answered",
+      "next_step": "决定好了再在卡上点按就可以。"
+     }
+    }
+   ],
+   "expect": {
+    "status": 200,
+    "model_calls": 2,
+    "response": {
+     "run_status": "completed",
+     "confirmation.status": "available",
+     "@open_card_orders": [
+      "O1001"
+     ],
+     "@business_status": "no_action",
+     "reply": {
+      "$contains": "的退货确认卡仍然有效，尚未提交。"
+     },
+     "@trace_types": {
+      "$lacks": "item_rejected"
+     }
+    },
+    "db": {
+     "unchanged": [
+      "orders",
+      "return_requests",
+      "return_cards"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-switch-without-naming-the-new-order-offers-the-others",
+   "as": "alice",
+   "call": "POST /sessions/{sid}/messages",
+   "body": {
+    "message": "这张不要了，换一单退",
+    "request_id": "g28-switch"
+   },
+   "model": [
+    {
+     "plan": {
+      "items": [
+       {
+        "kind": "withdraw",
+        "quote": "这张不要了",
+        "order_id": "current"
+       },
+       {
+        "kind": "return_request",
+        "quote": "换一单退"
+       }
+      ]
+     }
+    }
+   ],
+   "expect": {
+    "status": 200,
+    "model_calls": 1,
+    "response": {
+     "@business_status": "clarification_needed",
+     "@open_card_orders": [],
+     "confirmation.status": "unavailable",
+     "reply": {
+      "$lacks": "O1001："
+     },
+     "@reply_order_ids": [
+      "O1001",
+      "O1002",
+      "O1003",
+      "O1004"
+     ],
+     "@trace_types": {
+      "$contains": "order_resolution"
+     }
+    },
+    "db": {
+     "counts": {
+      "return_cards[status=voided,void_reason=chat_withdraw]": 1,
+      "return_cards[status=pending]": 0,
+      "return_requests": 0
+     },
+     "unchanged": [
+      "orders",
+      "return_requests"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-dropped-return-leaves-the-question-answered",
+   "as": "alice",
+   "call": "POST /sessions/{sid}/messages",
+   "body": {
+    "message": "收纳盒退回去的运费谁来出？顺便帮我退了",
+    "request_id": "g28-dropped"
+   },
+   "model": [
+    {
+     "plan": {
+      "items": [
+       {
+        "kind": "policy_question",
+        "quote": "收纳盒退回去的运费谁来出？",
+        "fee_subject": "return_shipping"
+       },
+       {
+        "kind": "return_request",
+        "quote": "上回说好的那单",
+        "order_quote": "收纳盒",
+        "order_id": "O1004"
+       }
+      ]
+     }
+    },
+    {
+     "answer": {
+      "disposition": "gap",
+      "note": "这一单寄回的运费归谁出，要看订单页的服务说明。"
+     }
+    }
+   ],
+   "expect": {
+    "status": 200,
+    "model_calls": 2,
+    "response": {
+     "run_status": "completed",
+     "@business_status": "blocked",
+     "@trace_types": {
+      "$contains": "item_rejected"
+     },
+     "reply": {
+      "$ordered": [
+       "这条消息里有一项要办的事这次没有办理",
+       "这一单寄回的运费归谁出"
+      ]
+     }
+    },
+    "model_requests": [
+     {
+      "tool": "plan_turn"
+     },
+     {
+      "tool": "respond",
+      "item_kinds": [
+       "policy_question"
+      ]
+     }
+    ],
+    "db": {
+     "unchanged": [
+      "orders",
+      "return_requests",
+      "return_cards"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-return-quoting-an-earlier-message-is-dropped",
+   "as": "alice",
+   "call": "POST /sessions/{sid}/messages",
+   "body": {
+    "message": "就按我前面说的办吧",
+    "request_id": "g28-history"
+   },
+   "model": [
+    {
+     "plan": {
+      "items": [
+       {
+        "kind": "return_request",
+        "quote": "O1001 申请退货",
+        "history_index": 2,
+        "order_quote": "O1001",
+        "order_id": "O1001"
+       }
+      ]
+     }
+    },
+    {
+     "answer": {
+      "disposition": "gap",
+      "note": "想退哪一单，写上订单号再说一次就好。"
+     }
+    }
+   ],
+   "expect": {
+    "status": 200,
+    "model_calls": 2,
+    "response": {
+     "run_status": "completed",
+     "@business_status": "blocked",
+     "@open_card_orders": [],
+     "@trace_types": {
+      "$contains": "item_rejected"
+     },
+     "reply": {
+      "$contains": "这条消息里有一项要办的事这次没有办理"
+     }
+    },
+    "db": {
+     "unchanged": [
+      "orders",
+      "return_requests",
+      "return_cards"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-broken-shape-goes-back-once",
+   "as": "alice",
+   "call": "POST /sessions/{sid}/messages",
+   "body": {
+    "message": "你好呀",
+    "request_id": "g28-shape-once"
+   },
+   "model": [
+    {
+     "tool": "plan_turn",
+     "arguments": {
+      "goal": "打招呼",
+      "items": [
+       {
+        "kind": "greeting",
+        "subkind": "none",
+        "quote": "你好呀",
+        "history_index": null,
+        "order_quote": "",
+        "order_id": "none",
+        "fee_subject": "none"
+       }
+      ],
+      "order_stage": "unknown",
+      "fee_flow": "unknown"
+     }
+    },
+    {
+     "plan": {
+      "items": [
+       {
+        "kind": "chit_chat",
+        "quote": "你好呀"
+       }
+      ]
+     }
+    },
+    {
+     "answer": {
+      "disposition": "answered",
+      "next_step": "有售后上的事随时说。"
+     }
+    }
+   ],
+   "expect": {
+    "status": 200,
+    "model_calls": 3,
+    "response": {
+     "run_status": "completed",
+     "@trace_types": {
+      "$contains": "structure_correction"
+     }
+    },
+    "model_requests": [
+     {
+      "tool": "plan_turn"
+     },
+     {
+      "tool": "plan_turn"
+     },
+     {
+      "tool": "respond"
+     }
+    ],
+    "db": {
+     "unchanged": [
+      "orders",
+      "return_requests",
+      "return_cards"
+     ]
+    }
+   }
+  },
+  {
+   "id": "two-broken-shapes-fail-the-turn-and-write-nothing",
+   "as": "alice",
+   "call": "POST /sessions/{sid}/messages",
+   "body": {
+    "message": "在吗",
+    "request_id": "g28-shape-twice"
+   },
+   "model": [
+    {
+     "tool": "plan_turn",
+     "arguments": {
+      "goal": "",
+      "items": [],
+      "order_stage": "unknown",
+      "fee_flow": "unknown"
+     }
+    },
+    {
+     "tool": "plan_turn",
+     "arguments": {
+      "goal": "问候",
+      "items": [],
+      "order_stage": "later",
+      "fee_flow": "unknown"
+     }
+    }
+   ],
+   "expect": {
+    "status": 200,
+    "model_calls": 2,
+    "response": {
+     "run_status": "model_error",
+     "next_step.action": "retry"
+    },
+    "db": {
+     "unchanged": [
+      "orders",
+      "return_requests",
+      "return_cards",
+      "tickets",
+      "ticket_events"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-read-of-another-accounts-order-is-stated-by-code",
+   "as": "alice",
+   "call": "POST /sessions/{sid}/messages",
+   "body": {
+    "message": "O2001 现在什么情况",
+    "request_id": "g28-foreign"
+   },
+   "model": [
+    {
+     "plan": {
+      "items": [
+       {
+        "kind": "own_order_status",
+        "quote": "现在什么情况",
+        "order_quote": "O2001"
+       }
+      ]
+     }
+    },
+    {
+     "answer": {
+      "disposition": "gap"
+     }
+    }
+   ],
+   "expect": {
+    "status": 200,
+    "model_calls": 2,
+    "response": {
+     "run_status": "completed",
+     "@business_error": "ORDER_NOT_FOUND",
+     "reply": {
+      "$contains": "当前登录的账号里没有订单"
+     },
+     "@reply_order_ids": [
+      "O2001"
+     ]
+    },
+    "model_requests": [
+     {
+      "tool": "plan_turn"
+     },
+     {
+      "tool": "respond",
+      "item_kinds": [
+       "own_order_status",
+       "message"
+      ]
+     }
+    ],
+    "db": {
+     "unchanged": [
+      "orders",
+      "return_requests",
+      "return_cards"
+     ]
+    }
+   }
+  }
+ ]
+}

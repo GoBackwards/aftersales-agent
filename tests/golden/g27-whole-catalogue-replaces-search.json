@@ -1,0 +1,304 @@
+{
+ "schema_version": "golden-scenario-v1",
+ "scenario_id": "G27-whole-catalogue-replaces-search",
+ "summary": "B6 整份卡片目录取代检索：服务固定本地知识发布和仓库卡片目录，答复上下文每一轮都带整份紧凑目录（24 张卡），card_id 的可选范围就是目录里的全部卡片，按目录版本固定；规划给不给检索词和主题都一样（B7：规划里已经没有这两个字段，脚本改用问题事项（plan_turn）），不再生成默认检索词，也没有检索轨迹；与提问字面无关的卡片也能被选中并由代码整卡展示；纯业务轮照样只调用规划。这些轮次都不写订单、申请、确认卡和工单",
+ "covers": [
+  "B6-whole-catalogue",
+  "B6-card-enum-per-version",
+  "B6-planner-search-fields-ignored",
+  "K2",
+  "D10",
+  "D15"
+ ],
+ "knowledge": "local_release",
+ "customers": [
+  "alice"
+ ],
+ "steps": [
+  {
+   "id": "open",
+   "as": "alice",
+   "call": "POST /sessions",
+   "body": {},
+   "save": {
+    "sid": "session_id"
+   },
+   "expect": {
+    "status": 201
+   }
+  },
+  {
+   "id": "a-question-with-search-fields-reads-the-whole-catalogue",
+   "as": "alice",
+   "call": "POST /sessions/{sid}/messages",
+   "body": {
+    "message": "请问这种情况按哪条来算？",
+    "request_id": "g27-search-fields"
+   },
+   "model": [
+    {
+     "plan": {"items": [{"kind": "policy_question", "quote": "请问这种情况按哪条来算？"}]}
+    },
+    {
+     "answer": {
+      "claims": [
+       {
+        "card_id": "pickup_carrier",
+        "outcome_index": 0
+       }
+      ]
+     }
+    }
+   ],
+   "expect": {
+    "status": 200,
+    "model_calls": 2,
+    "model_requests": [
+     {
+      "tool": "plan_turn"
+     },
+     {
+      "tool": "respond",
+      "strict": true,
+      "item_kinds": [
+       "policy_question"
+      ],
+      "context_keys": [
+       "conversation",
+       "option_sets",
+       "paths",
+       "policy_cards",
+       "turn_items",
+       "verified"
+      ],
+      "card_choices": [
+       "seven_day_return",
+       "quality_return_exchange",
+       "arrival_damage_missing",
+       "receipt_clock",
+       "seven_day_excluded_categories",
+       "digital_activation",
+       "digital_game_software",
+       "digital_security_code",
+       "digital_repair_preparation",
+       "warranty_18m",
+       "gift_general",
+       "gift_seven_day_branches",
+       "gift_loss_damage",
+       "return_shipping_responsibility",
+       "repair_shipping_responsibility",
+       "self_post_jd_pays",
+       "self_post_without_benefit",
+       "free_pickup_benefit",
+       "free_benefit_self_post",
+       "pickup_carrier",
+       "pickup_prices",
+       "instant_pickup_pricing",
+       "exchange_methods",
+       "directed_route_reference"
+      ],
+      "context_card_ids": [
+       "seven_day_return",
+       "quality_return_exchange",
+       "arrival_damage_missing",
+       "receipt_clock",
+       "seven_day_excluded_categories",
+       "digital_activation",
+       "digital_game_software",
+       "digital_security_code",
+       "digital_repair_preparation",
+       "warranty_18m",
+       "gift_general",
+       "gift_seven_day_branches",
+       "gift_loss_damage",
+       "return_shipping_responsibility",
+       "repair_shipping_responsibility",
+       "self_post_jd_pays",
+       "self_post_without_benefit",
+       "free_pickup_benefit",
+       "free_benefit_self_post",
+       "pickup_carrier",
+       "pickup_prices",
+       "instant_pickup_pricing",
+       "exchange_methods",
+       "directed_route_reference"
+      ]
+     }
+    ],
+    "response": {
+     "run_status": "completed",
+     "policy_status": "answered",
+     "@card_blocks": [
+      [
+       "pickup_carrier",
+       [
+        0
+       ],
+       []
+      ]
+     ],
+     "@trace_types": {
+      "$lacks": "policy_bundle"
+     }
+    },
+    "db": {
+     "unchanged": [
+      "orders",
+      "return_requests",
+      "return_cards",
+      "tickets",
+      "ticket_events"
+     ]
+    }
+   }
+  },
+  {
+   "id": "the-same-question-without-search-fields-reads-the-same-catalogue",
+   "as": "alice",
+   "call": "POST /sessions/{sid}/messages",
+   "body": {
+    "message": "换个说法再问一次，这种情况算哪条？",
+    "request_id": "g27-no-search-fields"
+   },
+   "model": [
+    {
+     "plan": {"items": [{"kind": "policy_question", "quote": "换个说法再问一次，这种情况算哪条？"}]}
+    },
+    {
+     "answer": {
+      "disposition": "gap",
+      "path": "policy_page"
+     }
+    }
+   ],
+   "expect": {
+    "status": 200,
+    "model_calls": 2,
+    "model_requests": [
+     {
+      "tool": "plan_turn"
+     },
+     {
+      "tool": "respond",
+      "context_keys": [
+       "conversation",
+       "option_sets",
+       "paths",
+       "policy_cards",
+       "turn_items",
+       "verified"
+      ],
+      "card_choices": [
+       "seven_day_return",
+       "quality_return_exchange",
+       "arrival_damage_missing",
+       "receipt_clock",
+       "seven_day_excluded_categories",
+       "digital_activation",
+       "digital_game_software",
+       "digital_security_code",
+       "digital_repair_preparation",
+       "warranty_18m",
+       "gift_general",
+       "gift_seven_day_branches",
+       "gift_loss_damage",
+       "return_shipping_responsibility",
+       "repair_shipping_responsibility",
+       "self_post_jd_pays",
+       "self_post_without_benefit",
+       "free_pickup_benefit",
+       "free_benefit_self_post",
+       "pickup_carrier",
+       "pickup_prices",
+       "instant_pickup_pricing",
+       "exchange_methods",
+       "directed_route_reference"
+      ],
+      "context_card_ids": [
+       "seven_day_return",
+       "quality_return_exchange",
+       "arrival_damage_missing",
+       "receipt_clock",
+       "seven_day_excluded_categories",
+       "digital_activation",
+       "digital_game_software",
+       "digital_security_code",
+       "digital_repair_preparation",
+       "warranty_18m",
+       "gift_general",
+       "gift_seven_day_branches",
+       "gift_loss_damage",
+       "return_shipping_responsibility",
+       "repair_shipping_responsibility",
+       "self_post_jd_pays",
+       "self_post_without_benefit",
+       "free_pickup_benefit",
+       "free_benefit_self_post",
+       "pickup_carrier",
+       "pickup_prices",
+       "instant_pickup_pricing",
+       "exchange_methods",
+       "directed_route_reference"
+      ]
+     }
+    ],
+    "response": {
+     "run_status": "completed",
+     "policy_status": "insufficient_evidence",
+     "@card_blocks": [],
+     "@trace_types": {
+      "$lacks": "policy_query_defaulted"
+     }
+    },
+    "db": {
+     "unchanged": [
+      "orders",
+      "return_requests",
+      "return_cards",
+      "tickets",
+      "ticket_events"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-business-turn-binds-the-catalogue-and-still-calls-only-the-planner",
+   "as": "alice",
+   "call": "POST /sessions/{sid}/messages",
+   "body": {
+    "message": "O1001 这单现在什么情况",
+    "request_id": "g27-business"
+   },
+   "model": [
+    {
+     "plan": {"items": [{"kind": "own_order_status", "quote": "O1001", "order_quote": "O1001", "order_id": "O1001"}]}
+    }
+   ],
+   "expect": {
+    "status": 200,
+    "model_calls": 1,
+    "response": {
+     "run_status": "completed",
+     "@business_status": "order_found",
+     "@card_blocks": [],
+     "policy_status": "not_requested",
+     "@trace_types": {
+      "$lacks": "policy_bundle"
+     }
+    },
+    "db": {
+     "unchanged": [
+      "orders",
+      "return_requests",
+      "return_cards",
+      "tickets",
+      "ticket_events"
+     ],
+     "counts": {
+      "session_runs[status=completed]": 3
+     }
+    }
+   }
+  }
+ ]
+}
